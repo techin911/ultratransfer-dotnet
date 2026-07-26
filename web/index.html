@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UltraTransfer .NET - Ultrafast Cross-Device File Transfer</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="js/qrcode.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <div class="brand-text">
+          <h1>UltraTransfer .NET</h1>
+          <p>Ultrafast Cross-Device File Sharing (Internet & Local LAN)</p>
+        </div>
+      </div>
+      <div class="mode-switcher">
+        <button id="btnModeLan" class="mode-btn active" onclick="switchMode('lan')">Local LAN Mode</button>
+        <button id="btnModeInternet" class="mode-btn" onclick="switchMode('internet')">Internet P2P Mode</button>
+      </div>
+    </header>
+
+    <!-- Main Dashboard Grid -->
+    <main class="dashboard-grid">
+      <!-- Left Column: Upload Dropzone & Live Analytics -->
+      <section class="card">
+        <div class="card-title">
+          <span>📁 File Upload Dropzone</span>
+          <span id="transferStatusBadge" style="font-size: 12px; color: var(--accent-green);">Ready</span>
+        </div>
+
+        <!-- Dropzone -->
+        <div id="dropzone" class="dropzone">
+          <input type="file" id="fileInput" multiple style="display: none;" onchange="handleFileSelect(event)">
+          <div class="dropzone-icon">🚀</div>
+          <div class="dropzone-text">
+            <h3>Drag & Drop Files Here</h3>
+            <p>Or click to select files from your computer or phone</p>
+          </div>
+          <label for="fileInput" class="btn-select">Browse Files</label>
+        </div>
+
+        <!-- Live Transfer Analytics -->
+        <div class="analytics-box">
+          <div class="stat-item">
+            <div class="stat-label">Transfer Speed</div>
+            <div id="statSpeed" class="stat-value">0.00 MB/s</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Progress</div>
+            <div id="statProgress" class="stat-value">0%</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Est. Time (ETA)</div>
+            <div id="statEta" class="stat-value">0s</div>
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="progress-container">
+          <div class="progress-bar-bg">
+            <div id="progressBarFill" class="progress-bar-fill"></div>
+          </div>
+        </div>
+
+        <!-- Speed Canvas Chart -->
+        <div class="chart-container">
+          <canvas id="speedChart"></canvas>
+        </div>
+      </section>
+
+      <!-- Right Column: Cross-Device Pairing & Connectivity -->
+      <aside class="card">
+        <div class="card-title">
+          <span>🔗 Quick Connect</span>
+        </div>
+
+        <!-- Internet 6-Digit Room View -->
+        <div id="internetPairingSection" class="pairing-box" style="display: none;">
+          <p style="font-size: 13px; color: var(--text-muted);">Share this 6-digit Room Code to connect over the Internet:</p>
+          <div id="roomCodeDisplay" class="room-badge">--- ---</div>
+          <div id="qrcodeInternet" class="qr-frame"></div>
+          <div style="width: 100%; display: flex; gap: 8px; margin-top: 10px;">
+            <input type="text" id="inputJoinRoom" placeholder="Enter 6-Digit Code" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border-card); background: #000; color: #fff; font-family: monospace; text-align: center;">
+            <button onclick="joinRoomByCode()" class="btn-action">Join</button>
+          </div>
+        </div>
+
+        <!-- LAN Direct IP View -->
+        <div id="lanPairingSection" class="pairing-box">
+          <p style="font-size: 13px; color: var(--text-muted);">Scan QR Code or open link on phone/laptop connected to same Wi-Fi:</p>
+          <div id="qrcodeLan" class="qr-frame"></div>
+          <div id="ipListContainer" class="ip-list"></div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

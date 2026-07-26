@@ -642,57 +642,64 @@ namespace UltraTransfer
 
             try
             {
-                byte[] fileBytes = File.ReadAllBytes(filePath);
-                string base64Data = Convert.ToBase64String(fileBytes);
-                string jsonPayload = "{\"name\":\"" + EscapeJson(fileName) + "\",\"content\":\"" + base64Data + "\"}";
-                byte[] payloadBytes = Encoding.UTF8.GetBytes(jsonPayload);
-
-                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(webhookUrl);
-                request.Method = "POST";
-                request.ContentType = "application/json";
-                request.ContentLength = payloadBytes.Length;
-                request.AllowAutoRedirect = false;
-                request.Timeout = 300000; // 5 minutes timeout
-
-                using (Stream requestStream = request.GetRequestStream())
+                using (FileStream fs = File.OpenRead(filePath))
                 {
-                    requestStream.Write(payloadBytes, 0, payloadBytes.Length);
-                }
+                    long totalSize = fs.Length;
+                    int chunkSize = 3 * 1024 * 1024; // 3MB binary chunk (= 4MB Base64, well under Google 50MB limit)
+                    int totalChunks = (int)Math.Ceiling((double)totalSize / chunkSize);
+                    if (totalChunks < 1) totalChunks = 1;
 
-                string redirectTarget = null;
-                try
-                {
-                    using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                    for (int chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++)
                     {
-                        redirectTarget = response.Headers["Location"];
+                        int currentChunkSize = (int)Math.Min(chunkSize, totalSize - (chunkIndex * (long)chunkSize));
+                        byte[] chunkBytes = new byte[currentChunkSize];
+                        fs.Read(chunkBytes, 0, currentChunkSize);
+
+                        string base64Chunk = Convert.ToBase64String(chunkBytes);
+                        string jsonPayload = "{\"name\":\"" + EscapeJson(fileName) + "\",\"chunkIndex\":" + chunkIndex + ",\"totalChunks\":" + totalChunks + ",\"content\":\"" + base64Chunk + "\"}";
+                        byte[] payloadBytes = Encoding.UTF8.GetBytes(jsonPayload);
+
+                        HttpWebRequest req = (HttpWebRequest)WebRequest.Create(webhookUrl);
+                        req.Method = "POST";
+                        req.ContentType = "application/json";
+                        req.ContentLength = payloadBytes.Length;
+                        req.AllowAutoRedirect = false;
+                        req.Timeout = 180000;
+
+                        using (Stream reqStream = req.GetRequestStream())
+                        {
+                            reqStream.Write(payloadBytes, 0, payloadBytes.Length);
+                        }
+
+                        string redirectUrl = null;
+                        try
+                        {
+                            using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                            {
+                                redirectUrl = resp.Headers["Location"];
+                            }
+                        }
+                        catch (WebException wex)
+                        {
+                            HttpWebResponse errResp = wex.Response as HttpWebResponse;
+                            if (errResp != null)
+                            {
+                                redirectUrl = errResp.Headers["Location"];
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(redirectUrl))
+                        {
+                            HttpWebRequest redirectReq = (HttpWebRequest)WebRequest.Create(redirectUrl);
+                            redirectReq.Method = "GET";
+                            using (HttpWebResponse redirectResp = (HttpWebResponse)redirectReq.GetResponse()) { }
+                        }
                     }
                 }
-                catch (WebException wex)
-                {
-                    HttpWebResponse errorResponse = wex.Response as HttpWebResponse;
-                    if (errorResponse != null)
-                    {
-                        redirectTarget = errorResponse.Headers["Location"];
-                    }
-                }
 
-                if (!string.IsNullOrEmpty(redirectTarget))
-                {
-                    HttpWebRequest redirectRequest = (HttpWebRequest)WebRequest.Create(redirectTarget);
-                    redirectRequest.Method = "GET";
-                    using (HttpWebResponse redirectResponse = (HttpWebResponse)redirectRequest.GetResponse())
-                    {
-                        Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine(" [✓] Successfully saved to Google Drive: " + fileName);
-                        Console.ResetColor();
-                    }
-                }
-                else
-                {
-                    Console.ForegroundColor = ConsoleColor.Green;
-                    Console.WriteLine(" [✓] Upload posted to Google Drive: " + fileName);
-                    Console.ResetColor();
-                }
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine(" [✓] Successfully saved to Google Drive: " + fileName);
+                Console.ResetColor();
             }
             catch (Exception ex)
             {

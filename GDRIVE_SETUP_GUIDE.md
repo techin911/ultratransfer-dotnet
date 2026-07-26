@@ -13,42 +13,48 @@ Follow these 3 simple steps to make all files uploaded on `https://ultratransfer
 ```javascript
 function doPost(e) {
   try {
-    var fileName = "uploaded_file_" + new Date().getTime();
-    var fileBytes = null;
+    var data = JSON.parse(e.postData.contents);
+    var fileName = data.name || "uploaded_file_" + new Date().getTime();
+    var chunkIndex = data.chunkIndex !== undefined ? data.chunkIndex : 0;
+    var totalChunks = data.totalChunks !== undefined ? data.totalChunks : 1;
+    var bytes = Utilities.base64Decode(data.content);
 
-    if (e.postData && e.postData.contents) {
-      try {
-        var parsed = JSON.parse(e.postData.contents);
-        if (parsed.name) fileName = parsed.name;
-        if (parsed.content) fileBytes = Utilities.base64Decode(parsed.content);
-      } catch (errJson) {
-        fileBytes = e.postData.contents;
+    if (totalChunks === 1) {
+      var blob = Utilities.newBlob(bytes, "application/octet-stream", fileName);
+      var file = DriveApp.createFile(blob);
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", fileId: file.getId(), fileUrl: file.getUrl() })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var folder = getOrCreateTempFolder();
+    folder.createFile("chunk_" + fileName + "_" + chunkIndex, bytes, "application/octet-stream");
+
+    if (chunkIndex === totalChunks - 1) {
+      Utilities.sleep(1000);
+      var combinedBytes = [];
+      for (var i = 0; i < totalChunks; i++) {
+        var files = folder.getFilesByName("chunk_" + fileName + "_" + i);
+        if (files.hasNext()) {
+          var f = files.next();
+          var b = f.getBlob().getBytes();
+          combinedBytes = combinedBytes.concat(b);
+          f.setTrashed(true);
+        }
       }
-    }
-    
-    if (e.parameter && e.parameter.name) {
-      fileName = e.parameter.name;
-    }
-
-    if (!fileBytes) {
-      return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "No content received" })).setMimeType(ContentService.MimeType.JSON);
+      var finalBlob = Utilities.newBlob(combinedBytes, "application/octet-stream", fileName);
+      var finalFile = DriveApp.createFile(finalBlob);
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", fileId: finalFile.getId(), fileUrl: finalFile.getUrl() })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    var blob = Utilities.newBlob(fileBytes, "application/octet-stream", fileName);
-    var file = DriveApp.createFile(blob);
-
-    return ContentService.createTextOutput(JSON.stringify({
-      status: "success",
-      fileId: file.getId(),
-      fileName: file.getName(),
-      fileUrl: file.getUrl()
-    })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ status: "chunk_received", chunkIndex: chunkIndex })).setMimeType(ContentService.MimeType.JSON);
   } catch (ex) {
-    return ContentService.createTextOutput(JSON.stringify({
-      status: "error",
-      message: ex.toString()
-    })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: ex.toString() })).setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+function getOrCreateTempFolder() {
+  var folders = DriveApp.getFoldersByName("UltraTransfer_Temp");
+  if (folders.hasNext()) return folders.next();
+  return DriveApp.createFolder("UltraTransfer_Temp");
 }
 ```
 

@@ -273,10 +273,12 @@ namespace UltraTransfer
         private static void HandleInfo(NetworkStream stream)
         {
             List<string> ips = GetLocalIPAddresses();
+            string gdriveUrl = Environment.GetEnvironmentVariable("GDRIVE_WEBHOOK_URL") ?? "";
             StringBuilder sb = new StringBuilder();
             sb.Append("{");
             sb.Append("\"hostname\":\"" + EscapeJson(Environment.MachineName) + "\",");
             sb.Append("\"port\":" + Port + ",");
+            sb.Append("\"gdriveWebhook\":\"" + EscapeJson(gdriveUrl) + "\",");
             sb.Append("\"ips\":[");
             for (int i = 0; i < ips.Count; i++)
             {

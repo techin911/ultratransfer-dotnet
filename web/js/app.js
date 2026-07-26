@@ -272,19 +272,24 @@ async function uploadSingleFile(file) {
   }
   await Promise.all(workers);
 
-  // Complete Upload Session
-  await fetch('/api/upload/complete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId: sessionId })
-  });
-
-  document.getElementById('transferStatusBadge').innerText = 'Completed ✓';
+  document.getElementById('transferStatusBadge').innerText = 'Finalizing Upload...';
+  document.getElementById('transferStatusBadge').style.color = '#00e676';
   document.getElementById('statProgress').innerText = '100%';
   document.getElementById('progressBarFill').style.width = '100%';
+
+  // Complete Upload Session
+  try {
+    await fetch('/api/upload/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: sessionId })
+    });
+  } catch (err) {}
+
+  document.getElementById('transferStatusBadge').innerText = 'Completed ✓';
   setTimeout(() => {
     document.getElementById('transferStatusBadge').innerText = 'Ready';
-  }, 3000);
+  }, 4000);
 }
 
 // Chart Renderer

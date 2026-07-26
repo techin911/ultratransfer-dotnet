@@ -218,6 +218,10 @@ namespace UltraTransfer
                         string body = ReadBodyString(reader, contentLength);
                         HandleRoomSignal(stream, body);
                     }
+                    else if (path == "/api/upload")
+                    {
+                        HandleDirectUpload(stream, headers, contentLength);
+                    }
                     else if (path == "/api/upload/init")
                     {
                         string body = ReadBodyString(reader, contentLength);
@@ -337,9 +341,53 @@ namespace UltraTransfer
                         if (i < signals.Count - 1) sb.Append(",");
                     }
                     sb.Append("]}");
-                    SendJson(stream, 200, sb.ToString());
                 }
             }
+        }
+
+        private static void HandleDirectUpload(NetworkStream stream, Dictionary<string, string> headers, long contentLength)
+        {
+            string fileName = headers.ContainsKey("X-File-Name") ? Uri.UnescapeDataString(headers["X-File-Name"]) : null;
+            if (string.IsNullOrEmpty(fileName)) fileName = "uploaded_file_" + DateTime.Now.Ticks + ".dat";
+
+            string safeFileName = Path.GetFileName(fileName);
+            string targetPath = Path.Combine(UploadsDir, safeFileName);
+
+            int counter = 1;
+            string fileNameWithoutExt = Path.GetFileNameWithoutExtension(safeFileName);
+            string ext = Path.GetExtension(safeFileName);
+            while (File.Exists(targetPath))
+            {
+                targetPath = Path.Combine(UploadsDir, fileNameWithoutExt + "_" + counter + ext);
+                counter++;
+            }
+
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine(" [*] Incoming direct transfer started: " + Path.GetFileName(targetPath) + " (" + FormatBytes(contentLength) + ")");
+            Console.ResetColor();
+
+            using (FileStream fs = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
+            {
+                byte[] buffer = new byte[16384];
+                long remaining = contentLength;
+                while (remaining > 0)
+                {
+                    int toRead = (int)Math.Min(buffer.Length, remaining);
+                    int r = stream.Read(buffer, 0, toRead);
+                    if (r <= 0) break;
+                    fs.Write(buffer, 0, r);
+                    remaining -= r;
+                }
+            }
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine(" [✓] Completed file upload: " + Path.GetFileName(targetPath) + " (" + FormatBytes(contentLength) + ")");
+            Console.ResetColor();
+
+            string uploadPath = targetPath;
+            Task.Run(() => UploadToCloudStorage(uploadPath));
+
+            SendJson(stream, 200, "{\"status\":\"completed\",\"fileName\":\"" + EscapeJson(Path.GetFileName(targetPath)) + "\"}");
         }
 
         private static void HandleUploadInit(NetworkStream stream, string body)

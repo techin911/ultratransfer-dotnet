@@ -6,8 +6,8 @@ let currentRoomId = null;
 let peerConnection = null;
 let dataChannel = null;
 
-const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB Turbo Chunk Size
-const MAX_CONCURRENT_UPLOADS = 34;  // 34 High-Speed Parallel Upload Streams
+const CHUNK_SIZE = 512 * 1024;    // 512KB Extreme Turbo Chunk Size
+const MAX_CONCURRENT_UPLOADS = 100; // 100 Extreme Parallel Upload Streams
 
 document.addEventListener('DOMContentLoaded', () => {
   initChart();

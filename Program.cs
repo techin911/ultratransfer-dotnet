@@ -648,21 +648,43 @@ namespace UltraTransfer
                     req.Method = "POST";
                     req.ContentType = "application/json";
                     req.ContentLength = payloadBytes.Length;
-                    req.AllowAutoRedirect = true;
-                    req.Timeout = 180000; // 3 minute timeout
+                    req.AllowAutoRedirect = false; // Manually handle Google Apps Script 302 redirect
+                    req.Timeout = 180000;
 
                     using (Stream stream = req.GetRequestStream())
                     {
                         stream.Write(payloadBytes, 0, payloadBytes.Length);
                     }
 
-                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
-                    using (StreamReader reader = new StreamReader(resp.GetResponseStream()))
+                    string redirectUrl = null;
+                    try
                     {
-                        string respText = reader.ReadToEnd();
-                        Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine(" [✓] Successfully saved to Google Drive: " + fileName);
-                        Console.ResetColor();
+                        using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                        {
+                            redirectUrl = resp.Headers["Location"];
+                        }
+                    }
+                    catch (WebException wex)
+                    {
+                        HttpWebResponse errResp = wex.Response as HttpWebResponse;
+                        if (errResp != null)
+                        {
+                            redirectUrl = errResp.Headers["Location"];
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(redirectUrl))
+                    {
+                        HttpWebRequest redirectReq = (HttpWebRequest)WebRequest.Create(redirectUrl);
+                        redirectReq.Method = "GET";
+                        using (HttpWebResponse redirectResp = (HttpWebResponse)redirectReq.GetResponse())
+                        using (StreamReader reader = new StreamReader(redirectResp.GetResponseStream()))
+                        {
+                            string respText = reader.ReadToEnd();
+                            Console.ForegroundColor = ConsoleColor.Green;
+                            Console.WriteLine(" [✓] Successfully saved to Google Drive: " + fileName);
+                            Console.ResetColor();
+                        }
                     }
                 }
                 else if (!string.IsNullOrEmpty(accessToken))

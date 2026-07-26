@@ -13,10 +13,12 @@ Follow these 3 simple steps to make all files uploaded on `https://ultratransfer
 ```javascript
 function doPost(e) {
   try {
-    var fileName = e.parameter.name || "uploaded_file_" + new Date().getTime();
-    var blob = Utilities.newBlob(e.postData.contents, e.parameter.mimeType || "application/octet-stream", fileName);
+    var data = JSON.parse(e.postData.contents);
+    var fileName = data.name || "uploaded_file_" + new Date().getTime();
+    var bytes = Utilities.base64Decode(data.content);
+    var blob = Utilities.newBlob(bytes, data.mimeType || "application/octet-stream", fileName);
     
-    // Saves file to root of your Google Drive
+    // Saves file directly to root of your Google Drive
     var file = DriveApp.createFile(blob);
     
     return ContentService.createTextOutput(JSON.stringify({

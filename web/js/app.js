@@ -1,172 +1,41 @@
-// UltraTransfer JavaScript Engine - High-Performance Parallel Uploads & WebRTC P2P
-let currentMode = 'lan';
+// UltraTransfer JavaScript Engine - High-Performance Parallel Uploads & Auto Cloud Sync
 let speedData = new Array(30).fill(0);
 let speedChartCtx = null;
-let currentRoomId = null;
-let peerConnection = null;
-let dataChannel = null;
 
 const CHUNK_SIZE = 512 * 1024;    // 512KB Extreme Turbo Chunk Size
 const MAX_CONCURRENT_UPLOADS = 100; // 100 Extreme Parallel Upload Streams
 
 document.addEventListener('DOMContentLoaded', () => {
   initChart();
-  fetchServerInfo();
+  setupQuickConnect();
   setupDropzone();
-  createInternetRoom();
 });
 
-// Mode Switching
-function switchMode(mode) {
-  currentMode = mode;
-  document.getElementById('btnModeLan').classList.toggle('active', mode === 'lan');
-  document.getElementById('btnModeInternet').classList.toggle('active', mode === 'internet');
-  
-  document.getElementById('lanPairingSection').style.display = mode === 'lan' ? 'flex' : 'none';
-  document.getElementById('internetPairingSection').style.display = mode === 'internet' ? 'flex' : 'none';
-}
+function setupQuickConnect() {
+  const currentUrl = window.location.href;
+  const input = document.getElementById('shareUrlInput');
+  if (input) input.value = currentUrl;
 
-// Server Info & QR Code Setup
-async function fetchServerInfo() {
-  try {
-    const res = await fetch('/api/info');
-    const data = await res.json();
-    
-    const ipContainer = document.getElementById('ipListContainer');
-    ipContainer.innerHTML = '';
-    
-    const hostUrl = `http://localhost:${data.port}`;
-    let firstNetworkUrl = hostUrl;
-    
-    data.ips.forEach(ip => {
-      const url = `http://${ip}:${data.port}`;
-      if (firstNetworkUrl === hostUrl) firstNetworkUrl = url;
-      
-      const btn = document.createElement('button');
-      btn.className = 'ip-btn';
-      btn.innerHTML = `<span>${ip}:${data.port}</span> <span>📋 Copy</span>`;
-      btn.onclick = () => {
-        navigator.clipboard.writeText(url);
-        btn.querySelector('span:last-child').innerText = '✓ Copied!';
-        setTimeout(() => btn.querySelector('span:last-child').innerText = '📋 Copy', 2000);
-      };
-      ipContainer.appendChild(btn);
+  const qrContainer = document.getElementById('qrcodeDisplay');
+  if (qrContainer && window.QRCode) {
+    qrContainer.innerHTML = '';
+    new QRCode(qrContainer, {
+      text: currentUrl,
+      width: 160,
+      height: 160
     });
+  }
+}
 
-    // Render LAN QR Code
-    if (window.QRCode) {
-      new QRCode(document.getElementById('qrcodeLan'), {
-        text: firstNetworkUrl,
-        width: 150,
-        height: 150
-      });
+function copyShareUrl() {
+  const input = document.getElementById('shareUrlInput');
+  if (input) {
+    navigator.clipboard.writeText(input.value);
+    const btn = event.target;
+    if (btn) {
+      btn.innerText = '✓ Copied!';
+      setTimeout(() => btn.innerText = 'Copy', 2000);
     }
-  } catch (err) {
-    console.error('Failed to fetch server info:', err);
-  }
-}
-
-// Internet P2P Room Creation & Signaling
-async function createInternetRoom() {
-  try {
-    const res = await fetch('/api/room/create', { method: 'POST' });
-    const data = await res.json();
-    currentRoomId = data.roomId;
-    
-    document.getElementById('roomCodeDisplay').innerText = `${currentRoomId.slice(0,3)}-${currentRoomId.slice(3)}`;
-
-    const roomUrl = `${window.location.origin}?room=${currentRoomId}`;
-    if (window.QRCode) {
-      new QRCode(document.getElementById('qrcodeInternet'), {
-        text: roomUrl,
-        width: 140,
-        height: 140
-      });
-    }
-
-    startWebRTCListener();
-  } catch (err) {
-    console.error('Failed to create internet room:', err);
-  }
-}
-
-// WebRTC Signaling Poll
-async function startWebRTCListener() {
-  setInterval(async () => {
-    if (!currentRoomId) return;
-    try {
-      const res = await fetch('/api/room/signal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId: currentRoomId, action: 'poll' })
-      });
-      const data = await res.json();
-      if (data.signals && data.signals.length > 0) {
-        data.signals.forEach(sig => handleIncomingSignal(JSON.parse(sig)));
-      }
-    } catch (err) {}
-  }, 2000);
-}
-
-function handleIncomingSignal(sig) {
-  if (sig.type === 'offer') {
-    initWebRTCPeer(false);
-    peerConnection.setRemoteDescription(new RTCSessionDescription(sig.sdp));
-    peerConnection.createAnswer().then(answer => {
-      peerConnection.setLocalDescription(answer);
-      sendSignal({ type: 'answer', sdp: answer });
-    });
-  } else if (sig.type === 'candidate' && peerConnection) {
-    peerConnection.addIceCandidate(new RTCIceCandidate(sig.candidate));
-  }
-}
-
-function sendSignal(data) {
-  fetch('/api/room/signal', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ roomId: currentRoomId, action: 'send', signal: JSON.stringify(data) })
-  });
-}
-
-function initWebRTCPeer(isInitiator) {
-  const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-  peerConnection = new RTCPeerConnection(config);
-
-  peerConnection.onicecandidate = (event) => {
-    if (event.candidate) {
-      sendSignal({ type: 'candidate', candidate: event.candidate });
-    }
-  };
-
-  if (isInitiator) {
-    dataChannel = peerConnection.createDataChannel('fileTransfer');
-    setupDataChannel(dataChannel);
-    peerConnection.createOffer().then(offer => {
-      peerConnection.setLocalDescription(offer);
-      sendSignal({ type: 'offer', sdp: offer });
-    });
-  } else {
-    peerConnection.ondatachannel = (event) => {
-      dataChannel = event.channel;
-      setupDataChannel(dataChannel);
-    };
-  }
-}
-
-function setupDataChannel(channel) {
-  channel.onopen = () => {
-    document.getElementById('transferStatusBadge').innerText = 'P2P Connected';
-    document.getElementById('transferStatusBadge').style.color = '#00e676';
-  };
-}
-
-function joinRoomByCode() {
-  const code = document.getElementById('inputJoinRoom').value.trim().replace('-', '');
-  if (code.length === 6) {
-    currentRoomId = code;
-    initWebRTCPeer(true);
-    alert(`Connecting to Room ${code}...`);
   }
 }
 

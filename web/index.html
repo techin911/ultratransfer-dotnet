@@ -15,12 +15,8 @@
         <div class="brand-icon">⚡</div>
         <div class="brand-text">
           <h1>UltraTransfer .NET</h1>
-          <p>Ultrafast Cross-Device File Sharing (Internet & Local LAN)</p>
+          <p>Ultrafast Cross-Device File Sharing & Auto Cloud Sync</p>
         </div>
-      </div>
-      <div class="mode-switcher">
-        <button id="btnModeLan" class="mode-btn active" onclick="switchMode('lan')">Local LAN Mode</button>
-        <button id="btnModeInternet" class="mode-btn" onclick="switchMode('internet')">Internet P2P Mode</button>
       </div>
     </header>
 
@@ -79,22 +75,14 @@
           <span>🔗 Quick Connect</span>
         </div>
 
-        <!-- Internet 6-Digit Room View -->
-        <div id="internetPairingSection" class="pairing-box" style="display: none;">
-          <p style="font-size: 13px; color: var(--text-muted);">Share this 6-digit Room Code to connect over the Internet:</p>
-          <div id="roomCodeDisplay" class="room-badge">--- ---</div>
-          <div id="qrcodeInternet" class="qr-frame"></div>
+        <!-- Unified Direct Link & QR Code View -->
+        <div class="pairing-box">
+          <p style="font-size: 13px; color: var(--text-muted);">Scan QR Code or copy link to open on phone/laptop anywhere:</p>
+          <div id="qrcodeDisplay" class="qr-frame"></div>
           <div style="width: 100%; display: flex; gap: 8px; margin-top: 10px;">
-            <input type="text" id="inputJoinRoom" placeholder="Enter 6-Digit Code" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border-card); background: #000; color: #fff; font-family: monospace; text-align: center;">
-            <button onclick="joinRoomByCode()" class="btn-action">Join</button>
+            <input type="text" id="shareUrlInput" readonly style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border-card); background: #000; color: #fff; font-family: monospace; font-size: 12px; text-align: center;">
+            <button onclick="copyShareUrl()" class="btn-action">Copy</button>
           </div>
-        </div>
-
-        <!-- LAN Direct IP View -->
-        <div id="lanPairingSection" class="pairing-box">
-          <p style="font-size: 13px; color: var(--text-muted);">Scan QR Code or open link on phone/laptop connected to same Wi-Fi:</p>
-          <div id="qrcodeLan" class="qr-frame"></div>
-          <div id="ipListContainer" class="ip-list"></div>
         </div>
       </aside>
     </main>

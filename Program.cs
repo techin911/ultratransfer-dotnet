@@ -685,62 +685,50 @@ namespace UltraTransfer
             }
 
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine(" [☁️] Starting Google Drive cloud sync for: " + fileName);
+            Console.WriteLine(" [☁️] Starting Google Drive direct cloud sync for: " + fileName);
             Console.ResetColor();
 
             try
             {
-                using (FileStream fs = File.OpenRead(filePath))
-                using (BinaryReader br = new BinaryReader(fs))
+                byte[] fileBytes = File.ReadAllBytes(filePath);
+                string base64Chunk = Convert.ToBase64String(fileBytes);
+                string jsonPayload = "{\"name\":\"" + EscapeJson(fileName) + "\",\"content\":\"" + base64Chunk + "\"}";
+                byte[] payloadBytes = Encoding.UTF8.GetBytes(jsonPayload);
+
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(webhookUrl);
+                req.Method = "POST";
+                req.ContentType = "application/json";
+                req.ContentLength = payloadBytes.Length;
+                req.AllowAutoRedirect = false;
+                req.Timeout = 600000; // 10 minutes timeout for direct file upload
+
+                using (Stream reqStream = req.GetRequestStream())
                 {
-                    long totalSize = fs.Length;
-                    int chunkSize = 2 * 1024 * 1024; // 2MB binary chunk (= ~2.7MB Base64, super safe for Google Apps Script)
-                    int totalChunks = (int)Math.Ceiling((double)totalSize / chunkSize);
-                    if (totalChunks < 1) totalChunks = 1;
+                    reqStream.Write(payloadBytes, 0, payloadBytes.Length);
+                }
 
-                    for (int chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++)
+                string redirectUrl = null;
+                try
+                {
+                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
                     {
-                        byte[] chunkBytes = br.ReadBytes(chunkSize);
-                        string base64Chunk = Convert.ToBase64String(chunkBytes);
-                        string jsonPayload = "{\"name\":\"" + EscapeJson(fileName) + "\",\"chunkIndex\":" + chunkIndex + ",\"totalChunks\":" + totalChunks + ",\"content\":\"" + base64Chunk + "\"}";
-                        byte[] payloadBytes = Encoding.UTF8.GetBytes(jsonPayload);
-
-                        HttpWebRequest req = (HttpWebRequest)WebRequest.Create(webhookUrl);
-                        req.Method = "POST";
-                        req.ContentType = "application/json";
-                        req.ContentLength = payloadBytes.Length;
-                        req.AllowAutoRedirect = false;
-                        req.Timeout = 180000;
-
-                        using (Stream reqStream = req.GetRequestStream())
-                        {
-                            reqStream.Write(payloadBytes, 0, payloadBytes.Length);
-                        }
-
-                        string redirectUrl = null;
-                        try
-                        {
-                            using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
-                            {
-                                redirectUrl = resp.Headers["Location"];
-                            }
-                        }
-                        catch (WebException wex)
-                        {
-                            HttpWebResponse errResp = wex.Response as HttpWebResponse;
-                            if (errResp != null)
-                            {
-                                redirectUrl = errResp.Headers["Location"];
-                            }
-                        }
-
-                        if (!string.IsNullOrEmpty(redirectUrl))
-                        {
-                            HttpWebRequest redirectReq = (HttpWebRequest)WebRequest.Create(redirectUrl);
-                            redirectReq.Method = "GET";
-                            using (HttpWebResponse redirectResp = (HttpWebResponse)redirectReq.GetResponse()) { }
-                        }
+                        redirectUrl = resp.Headers["Location"];
                     }
+                }
+                catch (WebException wex)
+                {
+                    HttpWebResponse errResp = wex.Response as HttpWebResponse;
+                    if (errResp != null)
+                    {
+                        redirectUrl = errResp.Headers["Location"];
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(redirectUrl))
+                {
+                    HttpWebRequest redirectReq = (HttpWebRequest)WebRequest.Create(redirectUrl);
+                    redirectReq.Method = "GET";
+                    using (HttpWebResponse redirectResp = (HttpWebResponse)redirectReq.GetResponse()) { }
                 }
 
                 Console.ForegroundColor = ConsoleColor.Green;

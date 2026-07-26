@@ -1,16 +1,16 @@
-// UltraTransfer JavaScript Engine - Powered by Google Firebase Storage
+// UltraTransfer JavaScript Engine - High-Performance Parallel Uploads & Firebase Cloud Engine
 let speedData = new Array(30).fill(0);
 let speedChartCtx = null;
 
-// Firebase Configuration
+// Firebase Cloud Storage Configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyBxH3pK-lBdN9AC1o-TfReuV7vJkjAVktY",
-  authDomain: "ultratransfer.firebaseapp.com",
-  projectId: "ultratransfer",
-  storageBucket: "ultratransfer.firebasestorage.app",
-  messagingSenderId: "545524269467",
-  appId: "1:545524269467:web:c4dab3453e30bd0234e13e",
-  measurementId: "G-Q8M5XHW7RS"
+  apiKey: "AIzaSyChTSdK6lfETouESw7q98LQcCBbX-biYLU",
+  authDomain: "ultra-transfer-5ac31.firebaseapp.com",
+  projectId: "ultra-transfer-5ac31",
+  storageBucket: "ultra-transfer-5ac31.firebasestorage.app",
+  messagingSenderId: "688779242699",
+  appId: "1:688779242699:web:982df4562568dbadbf7f4e",
+  measurementId: "G-WDWJ44DWHS"
 };
 
 if (window.firebase) {
@@ -73,6 +73,7 @@ function handleFileSelect(e) {
   if (files.length > 0) uploadFiles(files);
 }
 
+// Multi-File Upload Queue
 async function uploadFiles(files) {
   for (let i = 0; i < files.length; i++) {
     await uploadSingleFile(files[i]);
@@ -89,15 +90,16 @@ async function uploadSingleFile(file) {
     let lastBytes = 0;
 
     if (window.firebase && firebase.storage) {
-      const storageRef = firebase.storage().ref('uploads/' + file.name);
+      const storageRef = firebase.storage().ref(`uploads/${file.name}`);
       const uploadTask = storageRef.put(file);
 
       uploadTask.on('state_changed',
         (snapshot) => {
-          const progressPct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          const progressPct = Math.round(progress);
+
           const now = Date.now();
           const timeDiff = (now - lastTime) / 1000;
-
           if (timeDiff >= 0.2 || snapshot.bytesTransferred === snapshot.totalBytes) {
             const speedBps = timeDiff > 0 ? (snapshot.bytesTransferred - lastBytes) / timeDiff : 0;
             const speedMBps = (speedBps / (1024 * 1024)).toFixed(2);
@@ -115,17 +117,12 @@ async function uploadSingleFile(file) {
           }
         },
         (error) => {
-          console.error("Firebase upload error:", error);
-          // Fallback to direct HTTP server stream
-          uploadViaHttp(file, resolve, reject);
+          console.error("Firebase Storage Upload Error:", error);
+          document.getElementById('transferStatusBadge').innerText = 'Upload Error';
+          reject(error);
         },
         async () => {
-          try {
-            const downloadUrl = await uploadTask.snapshot.ref.getDownloadURL();
-            console.log("Firebase Upload Success! Download URL:", downloadUrl);
-          } catch(e) {}
-
-          document.getElementById('transferStatusBadge').innerText = 'Saved to Firebase ✓';
+          document.getElementById('transferStatusBadge').innerText = 'Uploaded to Firebase Cloud ✓';
           document.getElementById('transferStatusBadge').style.color = '#00e676';
           document.getElementById('statProgress').innerText = '100%';
           document.getElementById('progressBarFill').style.width = '100%';
@@ -137,61 +134,13 @@ async function uploadSingleFile(file) {
         }
       );
     } else {
-      uploadViaHttp(file, resolve, reject);
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/upload', true);
+      xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
+      xhr.onload = () => resolve();
+      xhr.send(file);
     }
   });
-}
-
-function uploadViaHttp(file, resolve, reject) {
-  const startTime = Date.now();
-  let lastTime = startTime;
-  let lastBytes = 0;
-
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', '/api/upload', true);
-  xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
-
-  xhr.upload.onprogress = (evt) => {
-    if (evt.lengthComputable) {
-      const now = Date.now();
-      const timeDiff = (now - lastTime) / 1000;
-
-      if (timeDiff >= 0.2 || evt.loaded === evt.total) {
-        const speedBps = timeDiff > 0 ? (evt.loaded - lastBytes) / timeDiff : 0;
-        const speedMBps = (speedBps / (1024 * 1024)).toFixed(2);
-        const progressPct = Math.round((evt.loaded / evt.total) * 100);
-        const remainingBytes = evt.total - evt.loaded;
-        const etaSec = speedBps > 0 ? Math.round(remainingBytes / speedBps) : 0;
-
-        document.getElementById('statSpeed').innerText = `${speedMBps} MB/s`;
-        document.getElementById('statProgress').innerText = `${progressPct}%`;
-        document.getElementById('statEta').innerText = `${etaSec}s`;
-        document.getElementById('progressBarFill').style.width = `${progressPct}%`;
-
-        pushSpeedData(parseFloat(speedMBps));
-        lastTime = now;
-        lastBytes = evt.loaded;
-      }
-    }
-  };
-
-  xhr.onload = () => {
-    if (xhr.status === 200) {
-      document.getElementById('transferStatusBadge').innerText = 'Completed ✓';
-      document.getElementById('transferStatusBadge').style.color = '#00e676';
-      document.getElementById('statProgress').innerText = '100%';
-      document.getElementById('progressBarFill').style.width = '100%';
-      setTimeout(() => {
-        document.getElementById('transferStatusBadge').innerText = 'Ready';
-      }, 4000);
-      resolve();
-    } else {
-      reject(new Error('Upload failed'));
-    }
-  };
-
-  xhr.onerror = () => reject(new Error('Network error'));
-  xhr.send(file);
 }
 
 // Chart Renderer

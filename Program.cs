@@ -629,7 +629,12 @@ namespace UltraTransfer
 
             string fileName = Path.GetFileName(filePath);
             string webhookUrl = Environment.GetEnvironmentVariable("GDRIVE_WEBHOOK_URL");
-            string accessToken = Environment.GetEnvironmentVariable("GDRIVE_ACCESS_TOKEN");
+
+            if (string.IsNullOrEmpty(webhookUrl))
+            {
+                Console.WriteLine(" [!] GDRIVE_WEBHOOK_URL is not set on Render. Set GDRIVE_WEBHOOK_URL to auto-save to Google Drive.");
+                return;
+            }
 
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine(" [☁️] Starting Google Drive cloud sync for: " + fileName);
@@ -637,88 +642,62 @@ namespace UltraTransfer
 
             try
             {
-                if (!string.IsNullOrEmpty(webhookUrl))
+                byte[] fileBytes = File.ReadAllBytes(filePath);
+                string base64Data = Convert.ToBase64String(fileBytes);
+                string jsonPayload = "{\"name\":\"" + EscapeJson(fileName) + "\",\"content\":\"" + base64Data + "\"}";
+                byte[] payloadBytes = Encoding.UTF8.GetBytes(jsonPayload);
+
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(webhookUrl);
+                request.Method = "POST";
+                request.ContentType = "application/json";
+                request.ContentLength = payloadBytes.Length;
+                request.AllowAutoRedirect = false;
+                request.Timeout = 300000; // 5 minutes timeout
+
+                using (Stream requestStream = request.GetRequestStream())
                 {
-                    byte[] fileBytes = File.ReadAllBytes(filePath);
-                    string base64Content = Convert.ToBase64String(fileBytes);
-                    string jsonPayload = "{\"name\":\"" + EscapeJson(fileName) + "\",\"content\":\"" + base64Content + "\"}";
-                    byte[] payloadBytes = Encoding.UTF8.GetBytes(jsonPayload);
+                    requestStream.Write(payloadBytes, 0, payloadBytes.Length);
+                }
 
-                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(webhookUrl);
-                    req.Method = "POST";
-                    req.ContentType = "application/json";
-                    req.ContentLength = payloadBytes.Length;
-                    req.AllowAutoRedirect = false; // Manually handle Google Apps Script 302 redirect
-                    req.Timeout = 180000;
-
-                    using (Stream stream = req.GetRequestStream())
+                string redirectTarget = null;
+                try
+                {
+                    using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
                     {
-                        stream.Write(payloadBytes, 0, payloadBytes.Length);
-                    }
-
-                    string redirectUrl = null;
-                    try
-                    {
-                        using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
-                        {
-                            redirectUrl = resp.Headers["Location"];
-                        }
-                    }
-                    catch (WebException wex)
-                    {
-                        HttpWebResponse errResp = wex.Response as HttpWebResponse;
-                        if (errResp != null)
-                        {
-                            redirectUrl = errResp.Headers["Location"];
-                        }
-                    }
-
-                    if (!string.IsNullOrEmpty(redirectUrl))
-                    {
-                        HttpWebRequest redirectReq = (HttpWebRequest)WebRequest.Create(redirectUrl);
-                        redirectReq.Method = "GET";
-                        using (HttpWebResponse redirectResp = (HttpWebResponse)redirectReq.GetResponse())
-                        using (StreamReader reader = new StreamReader(redirectResp.GetResponseStream()))
-                        {
-                            string respText = reader.ReadToEnd();
-                            Console.ForegroundColor = ConsoleColor.Green;
-                            Console.WriteLine(" [✓] Successfully saved to Google Drive: " + fileName);
-                            Console.ResetColor();
-                        }
+                        redirectTarget = response.Headers["Location"];
                     }
                 }
-                else if (!string.IsNullOrEmpty(accessToken))
+                catch (WebException wex)
                 {
-                    byte[] fileBytes = File.ReadAllBytes(filePath);
-                    string url = "https://www.googleapis.com/upload/drive/v3/files?uploadType=media";
-
-                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
-                    req.Method = "POST";
-                    req.Headers["Authorization"] = "Bearer " + accessToken;
-                    req.ContentType = "application/octet-stream";
-                    req.ContentLength = fileBytes.Length;
-
-                    using (Stream stream = req.GetRequestStream())
+                    HttpWebResponse errorResponse = wex.Response as HttpWebResponse;
+                    if (errorResponse != null)
                     {
-                        stream.Write(fileBytes, 0, fileBytes.Length);
+                        redirectTarget = errorResponse.Headers["Location"];
                     }
+                }
 
-                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                if (!string.IsNullOrEmpty(redirectTarget))
+                {
+                    HttpWebRequest redirectRequest = (HttpWebRequest)WebRequest.Create(redirectTarget);
+                    redirectRequest.Method = "GET";
+                    using (HttpWebResponse redirectResponse = (HttpWebResponse)redirectRequest.GetResponse())
                     {
                         Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine(" [✓] Successfully saved to Google Drive (API v3): " + fileName);
+                        Console.WriteLine(" [✓] Successfully saved to Google Drive: " + fileName);
                         Console.ResetColor();
                     }
                 }
                 else
                 {
-                    Console.WriteLine(" [!] Note: GDRIVE_WEBHOOK_URL is not set on Render. Configure GDRIVE_WEBHOOK_URL to auto-save to Google Drive.");
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine(" [✓] Upload posted to Google Drive: " + fileName);
+                    Console.ResetColor();
                 }
             }
             catch (Exception ex)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine(" [!] Google Drive sync error: " + ex.Message);
+                Console.WriteLine(" [!] Google Drive upload error: " + ex.Message);
                 Console.ResetColor();
             }
         }

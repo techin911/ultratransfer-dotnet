@@ -13,23 +13,40 @@ Follow these 3 simple steps to make all files uploaded on `https://ultratransfer
 ```javascript
 function doPost(e) {
   try {
-    var data = JSON.parse(e.postData.contents);
-    var fileName = data.name || "uploaded_file_" + new Date().getTime();
-    var bytes = Utilities.base64Decode(data.content);
-    var blob = Utilities.newBlob(bytes, data.mimeType || "application/octet-stream", fileName);
+    var fileName = "uploaded_file_" + new Date().getTime();
+    var fileBytes = null;
+
+    if (e.postData && e.postData.contents) {
+      try {
+        var parsed = JSON.parse(e.postData.contents);
+        if (parsed.name) fileName = parsed.name;
+        if (parsed.content) fileBytes = Utilities.base64Decode(parsed.content);
+      } catch (errJson) {
+        fileBytes = e.postData.contents;
+      }
+    }
     
-    // Saves file directly to root of your Google Drive
+    if (e.parameter && e.parameter.name) {
+      fileName = e.parameter.name;
+    }
+
+    if (!fileBytes) {
+      return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "No content received" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var blob = Utilities.newBlob(fileBytes, "application/octet-stream", fileName);
     var file = DriveApp.createFile(blob);
-    
+
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
       fileId: file.getId(),
+      fileName: file.getName(),
       fileUrl: file.getUrl()
     })).setMimeType(ContentService.MimeType.JSON);
-  } catch (err) {
+  } catch (ex) {
     return ContentService.createTextOutput(JSON.stringify({
       status: "error",
-      message: err.toString()
+      message: ex.toString()
     })).setMimeType(ContentService.MimeType.JSON);
   }
 }

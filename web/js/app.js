@@ -102,7 +102,7 @@ async function uploadSingleFile(file) {
     };
 
     xhr.onload = () => {
-      if (xhr.status === 200) {
+      if (xhr.status >= 200 && xhr.status < 300) {
         document.getElementById('transferStatusBadge').innerText = 'Saved to Google Drive ✓';
         document.getElementById('transferStatusBadge').style.color = '#00e676';
         document.getElementById('statProgress').innerText = '100%';
@@ -112,6 +112,7 @@ async function uploadSingleFile(file) {
         }, 4000);
         resolve();
       } else {
+        console.error("Server returned HTTP error status:", xhr.status);
         document.getElementById('transferStatusBadge').innerText = 'Upload Error';
         reject(new Error('Upload failed'));
       }

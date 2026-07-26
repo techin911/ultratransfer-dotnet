@@ -2,8 +2,8 @@
 let speedData = new Array(30).fill(0);
 let speedChartCtx = null;
 
-const CHUNK_SIZE = 512 * 1024;    // 512KB Extreme Turbo Chunk Size
-const MAX_CONCURRENT_UPLOADS = 100; // 100 Extreme Parallel Upload Streams
+const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB Optimal Chunk Size
+const MAX_CONCURRENT_UPLOADS = 6;   // 6 Optimal Upload Streams (Avoids TCP Throttling)
 
 document.addEventListener('DOMContentLoaded', () => {
   initChart();

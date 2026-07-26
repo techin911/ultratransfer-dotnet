@@ -691,18 +691,16 @@ namespace UltraTransfer
             try
             {
                 using (FileStream fs = File.OpenRead(filePath))
+                using (BinaryReader br = new BinaryReader(fs))
                 {
                     long totalSize = fs.Length;
-                    int chunkSize = 3 * 1024 * 1024; // 3MB binary chunk (= 4MB Base64, well under Google 50MB limit)
+                    int chunkSize = 2 * 1024 * 1024; // 2MB binary chunk (= ~2.7MB Base64, super safe for Google Apps Script)
                     int totalChunks = (int)Math.Ceiling((double)totalSize / chunkSize);
                     if (totalChunks < 1) totalChunks = 1;
 
                     for (int chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++)
                     {
-                        int currentChunkSize = (int)Math.Min(chunkSize, totalSize - (chunkIndex * (long)chunkSize));
-                        byte[] chunkBytes = new byte[currentChunkSize];
-                        fs.Read(chunkBytes, 0, currentChunkSize);
-
+                        byte[] chunkBytes = br.ReadBytes(chunkSize);
                         string base64Chunk = Convert.ToBase64String(chunkBytes);
                         string jsonPayload = "{\"name\":\"" + EscapeJson(fileName) + "\",\"chunkIndex\":" + chunkIndex + ",\"totalChunks\":" + totalChunks + ",\"content\":\"" + base64Chunk + "\"}";
                         byte[] payloadBytes = Encoding.UTF8.GetBytes(jsonPayload);

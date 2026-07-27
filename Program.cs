@@ -341,6 +341,7 @@ namespace UltraTransfer
                         if (i < signals.Count - 1) sb.Append(",");
                     }
                     sb.Append("]}");
+                    SendJson(stream, 200, sb.ToString());
                 }
             }
         }
@@ -587,7 +588,7 @@ namespace UltraTransfer
             sb.Append("Content-Length: " + body.Length + "\r\n");
             sb.Append("Access-Control-Allow-Origin: *\r\n");
             sb.Append("Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n");
-            sb.Append("Access-Control-Allow-Headers: Content-Type, X-Session-Id, X-Chunk-Index, X-Total-Chunks, X-Offset\r\n");
+            sb.Append("Access-Control-Allow-Headers: Content-Type, X-File-Name, X-Session-Id, X-Chunk-Index, X-Total-Chunks, X-Offset\r\n");
             sb.Append("Connection: close\r\n");
 
             if (extraHeaders != null)

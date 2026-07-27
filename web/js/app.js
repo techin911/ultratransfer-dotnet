@@ -24,11 +24,10 @@ function setupQuickConnect() {
   }
 }
 
-function copyShareUrl() {
+function copyShareUrl(btn) {
   const input = document.getElementById('shareUrlInput');
   if (input) {
     navigator.clipboard.writeText(input.value);
-    const btn = event.target;
     if (btn) {
       btn.innerText = '✓ Copied!';
       setTimeout(() => btn.innerText = 'Copy', 2000);

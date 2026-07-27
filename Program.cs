@@ -681,23 +681,23 @@ namespace UltraTransfer
 
             if (string.IsNullOrEmpty(webhookUrl))
             {
-                Console.WriteLine(" [!] GDRIVE_WEBHOOK_URL is not set. Set it on Render to auto-save to Google Drive.");
+                Console.WriteLine(" [!] GDRIVE_WEBHOOK_URL is not set on Render. Set GDRIVE_WEBHOOK_URL to auto-save to Google Drive.");
                 return;
             }
 
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine(" [☁️] Starting Google Drive sync for: " + fileName);
+            Console.WriteLine(" [☁️] Starting Google Drive direct cloud sync for: " + fileName);
             Console.ResetColor();
 
             try
             {
                 byte[] fileBytes = File.ReadAllBytes(filePath);
-                string base64Content = Convert.ToBase64String(fileBytes);
-                string jsonPayload = "{\"name\":\"" + EscapeJson(fileName) + "\",\"content\":\"" + base64Content + "\"}";
+                string base64Chunk = Convert.ToBase64String(fileBytes);
+                string jsonPayload = "{\"name\":\"" + EscapeJson(fileName) + "\",\"content\":\"" + base64Chunk + "\"}";
                 byte[] payloadBytes = Encoding.UTF8.GetBytes(jsonPayload);
 
-                // Follow GAS redirects manually, always re-POSTing so doPost() is called correctly.
-                // Google Apps Script returns a 302 redirect — we must POST to the final URL, not GET.
+                // GAS returns a 302 redirect after POST — we must re-POST to Location,
+                // NOT do a GET (GET would call doGet() instead of doPost(), losing the file data).
                 string currentUrl = webhookUrl;
                 int maxRedirects = 5;
 
@@ -708,7 +708,7 @@ namespace UltraTransfer
                     req.ContentType = "application/json";
                     req.ContentLength = payloadBytes.Length;
                     req.AllowAutoRedirect = false;
-                    req.Timeout = 600000;
+                    req.Timeout = 600000; // 10 minutes timeout for direct file upload
 
                     using (Stream reqStream = req.GetRequestStream())
                     {
@@ -730,7 +730,7 @@ namespace UltraTransfer
                     {
                         int statusCode = (int)resp.StatusCode;
 
-                        // Follow redirect by re-POSTing to Location (fixes GAS 302 redirect bug)
+                        // Re-POST to redirect location (fixes silent GAS 302 bug)
                         if ((statusCode == 301 || statusCode == 302 || statusCode == 303 || statusCode == 307 || statusCode == 308)
                             && !string.IsNullOrEmpty(resp.Headers["Location"]))
                         {
@@ -738,14 +738,13 @@ namespace UltraTransfer
                             continue;
                         }
 
-                        // Success — read the response body for logging
                         if (statusCode >= 200 && statusCode < 300)
                         {
                             using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
                             {
                                 string body = sr.ReadToEnd();
                                 Console.ForegroundColor = ConsoleColor.Green;
-                                Console.WriteLine(" [✓] Saved to Google Drive: " + fileName);
+                                Console.WriteLine(" [✓] Successfully saved to Google Drive: " + fileName);
                                 if (body.Contains("\"fileUrl\""))
                                 {
                                     string fileUrl = GetJsonValue(body, "fileUrl");

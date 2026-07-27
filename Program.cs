@@ -681,60 +681,87 @@ namespace UltraTransfer
 
             if (string.IsNullOrEmpty(webhookUrl))
             {
-                Console.WriteLine(" [!] GDRIVE_WEBHOOK_URL is not set on Render. Set GDRIVE_WEBHOOK_URL to auto-save to Google Drive.");
+                Console.WriteLine(" [!] GDRIVE_WEBHOOK_URL is not set. Set it on Render to auto-save to Google Drive.");
                 return;
             }
 
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine(" [☁️] Starting Google Drive direct cloud sync for: " + fileName);
+            Console.WriteLine(" [☁️] Starting Google Drive sync for: " + fileName);
             Console.ResetColor();
 
             try
             {
                 byte[] fileBytes = File.ReadAllBytes(filePath);
-                string base64Chunk = Convert.ToBase64String(fileBytes);
-                string jsonPayload = "{\"name\":\"" + EscapeJson(fileName) + "\",\"content\":\"" + base64Chunk + "\"}";
+                string base64Content = Convert.ToBase64String(fileBytes);
+                string jsonPayload = "{\"name\":\"" + EscapeJson(fileName) + "\",\"content\":\"" + base64Content + "\"}";
                 byte[] payloadBytes = Encoding.UTF8.GetBytes(jsonPayload);
 
-                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(webhookUrl);
-                req.Method = "POST";
-                req.ContentType = "application/json";
-                req.ContentLength = payloadBytes.Length;
-                req.AllowAutoRedirect = false;
-                req.Timeout = 600000; // 10 minutes timeout for direct file upload
+                // Follow GAS redirects manually, always re-POSTing so doPost() is called correctly.
+                // Google Apps Script returns a 302 redirect — we must POST to the final URL, not GET.
+                string currentUrl = webhookUrl;
+                int maxRedirects = 5;
 
-                using (Stream reqStream = req.GetRequestStream())
+                for (int attempt = 0; attempt <= maxRedirects; attempt++)
                 {
-                    reqStream.Write(payloadBytes, 0, payloadBytes.Length);
-                }
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(currentUrl);
+                    req.Method = "POST";
+                    req.ContentType = "application/json";
+                    req.ContentLength = payloadBytes.Length;
+                    req.AllowAutoRedirect = false;
+                    req.Timeout = 600000;
 
-                string redirectUrl = null;
-                try
-                {
-                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                    using (Stream reqStream = req.GetRequestStream())
                     {
-                        redirectUrl = resp.Headers["Location"];
+                        reqStream.Write(payloadBytes, 0, payloadBytes.Length);
+                    }
+
+                    HttpWebResponse resp = null;
+                    try
+                    {
+                        resp = (HttpWebResponse)req.GetResponse();
+                    }
+                    catch (WebException wex)
+                    {
+                        resp = wex.Response as HttpWebResponse;
+                        if (resp == null) throw;
+                    }
+
+                    using (resp)
+                    {
+                        int statusCode = (int)resp.StatusCode;
+
+                        // Follow redirect by re-POSTing to Location (fixes GAS 302 redirect bug)
+                        if ((statusCode == 301 || statusCode == 302 || statusCode == 303 || statusCode == 307 || statusCode == 308)
+                            && !string.IsNullOrEmpty(resp.Headers["Location"]))
+                        {
+                            currentUrl = resp.Headers["Location"];
+                            continue;
+                        }
+
+                        // Success — read the response body for logging
+                        if (statusCode >= 200 && statusCode < 300)
+                        {
+                            using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
+                            {
+                                string body = sr.ReadToEnd();
+                                Console.ForegroundColor = ConsoleColor.Green;
+                                Console.WriteLine(" [✓] Saved to Google Drive: " + fileName);
+                                if (body.Contains("\"fileUrl\""))
+                                {
+                                    string fileUrl = GetJsonValue(body, "fileUrl");
+                                    if (!string.IsNullOrEmpty(fileUrl))
+                                        Console.WriteLine(" [🔗] Drive URL: " + fileUrl);
+                                }
+                                Console.ResetColor();
+                            }
+                            return;
+                        }
+
+                        throw new Exception("Unexpected HTTP status: " + statusCode);
                     }
                 }
-                catch (WebException wex)
-                {
-                    HttpWebResponse errResp = wex.Response as HttpWebResponse;
-                    if (errResp != null)
-                    {
-                        redirectUrl = errResp.Headers["Location"];
-                    }
-                }
 
-                if (!string.IsNullOrEmpty(redirectUrl))
-                {
-                    HttpWebRequest redirectReq = (HttpWebRequest)WebRequest.Create(redirectUrl);
-                    redirectReq.Method = "GET";
-                    using (HttpWebResponse redirectResp = (HttpWebResponse)redirectReq.GetResponse()) { }
-                }
-
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine(" [✓] Successfully saved to Google Drive: " + fileName);
-                Console.ResetColor();
+                throw new Exception("Too many redirects from Google Apps Script.");
             }
             catch (Exception ex)
             {
